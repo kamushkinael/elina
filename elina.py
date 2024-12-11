@@ -1,6 +1,6 @@
 import sys
 import random
-from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QGridLayout, QLabel, QHBoxLayout
+from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QHBoxLayout, QFileDialog
 from PyQt5.QtCore import QTimer, Qt
 from PyQt5.QtGui import QColor, QPainter
 
@@ -37,6 +37,7 @@ class GameOfLife(QWidget):
 
         # Панель управления
         control_panel = QVBoxLayout()
+        
         self.start_button = QPushButton("Старт")
         self.start_button.clicked.connect(self.start_game)
         
@@ -49,10 +50,18 @@ class GameOfLife(QWidget):
         self.random_button = QPushButton("Случайно")
         self.random_button.clicked.connect(self.randomize_grid)
         
+        self.save_button = QPushButton("Сохранить")
+        self.save_button.clicked.connect(self.save_grid_to_file)
+        
+        self.load_button = QPushButton("Загрузить")
+        self.load_button.clicked.connect(self.load_grid_from_file)
+        
         control_panel.addWidget(self.start_button)
         control_panel.addWidget(self.stop_button)
         control_panel.addWidget(self.clear_button)
         control_panel.addWidget(self.random_button)
+        control_panel.addWidget(self.save_button)
+        control_panel.addWidget(self.load_button)
         control_panel.addStretch()
         
         main_layout.addLayout(control_panel)
@@ -96,7 +105,6 @@ class GameOfLife(QWidget):
                     new_grid[row][col] = 1
                 elif alive == 0 and neighbors == 3:  # Новая клетка рождается
                     new_grid[row][col] = 1
-                # В противном случае клетка остаётся мёртвой
         self.grid = new_grid
 
     def step(self):
@@ -116,6 +124,30 @@ class GameOfLife(QWidget):
         self.running = False
         self.timer.stop()
 
+    def save_grid_to_file(self):
+        """Сохраняет текущее состояние сетки в файл."""
+        file_path, _ = QFileDialog.getSaveFileName(self, "Сохранить сетку", "", "Текстовые файлы (*.txt)")
+        if file_path:
+            try:
+                with open(file_path, 'w') as file:
+                    for row in self.grid:
+                        file.write(''.join(map(str, row)) + '\n')
+            except Exception as e:
+                print(f"Ошибка при сохранении файла: {e}")
+
+    def load_grid_from_file(self):
+        """Загружает состояние сетки из файла."""
+        file_path, _ = QFileDialog.getOpenFileName(self, "Загрузить сетку", "", "Текстовые файлы (*.txt)")
+        if file_path:
+            try:
+                with open(file_path, 'r') as file:
+                    new_grid = [list(map(int, list(line.strip()))) for line in file if line.strip()]
+                if len(new_grid) == GRID_SIZE and all(len(row) == GRID_SIZE for row in new_grid):
+                    self.grid = new_grid
+                    self.canvas.update_grid(self.grid)
+            except Exception as e:
+                print(f"Ошибка при загрузке файла: {e}")
+
 
 class GameCanvas(QWidget):
     """Поле для отрисовки клеток."""
@@ -123,6 +155,7 @@ class GameCanvas(QWidget):
         super().__init__()
         self.grid = grid
         self.setFixedSize(GRID_SIZE * CELL_SIZE, GRID_SIZE * CELL_SIZE)
+        self.is_drawing = False
 
     def update_grid(self, grid):
         """Обновляет внутреннюю сетку и перерисовывает холст."""
@@ -137,9 +170,20 @@ class GameCanvas(QWidget):
                 if self.grid[row][col] == 1:  # Живая клетка
                     x = col * CELL_SIZE
                     y = row * CELL_SIZE
-                    painter.fillRect(x, y, CELL_SIZE, CELL_SIZE, QColor(0, 128, 0))  # Зелёный цвет для живых клеток
+                    painter.fillRect(x, y, CELL_SIZE, CELL_SIZE, QColor(0, 128, 0))
                     painter.setPen(QColor(0, 0, 0))
                     painter.drawRect(x, y, CELL_SIZE, CELL_SIZE)
+
+    def mouseMoveEvent(self, event):
+        """Рисование или стирание клеток при движении мыши."""
+        x = event.x() // CELL_SIZE
+        y = event.y() // CELL_SIZE
+        if 0 <= x < GRID_SIZE and 0 <= y < GRID_SIZE:
+            if event.buttons() & Qt.LeftButton:  # ЛКМ — рисование
+                self.grid[y][x] = 1
+            elif event.buttons() & Qt.RightButton:  # ПКМ — стирание
+                self.grid[y][x] = 0
+            self.update()
 
 
 if __name__ == "__main__":
